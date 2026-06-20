@@ -24,6 +24,7 @@ import staffRoutes from "./routes/staff";
 import assetsRoutes from "./routes/assets";
 import cmeRoutes from "./routes/cme";
 import reportsRoutes from "./routes/reports";
+import icd10Routes from "./routes/icd10";
 
 const app = new Hono();
 
@@ -167,6 +168,7 @@ app.route("/api/v1/staff", staffRoutes);
 app.route("/api/v1/assets", assetsRoutes);
 app.route("/api/v1/cme", cmeRoutes);
 app.route("/api/v1/reports", reportsRoutes);
+app.route("/api/v1/icd10", icd10Routes);
 
 // Global error handler
 app.onError((err, c) => {

@@ -234,6 +234,10 @@ async function seed() {
   if (specialtyData.oncology.length) await db.insert(s.oncologyRecords).values(specialtyData.oncology);
   console.log("  Specialty records seeded");
 
+  // ── ICD-10 Master Data ─────────────────────────────────────────────────
+  const { default: seedIcd10Data } = await import("./seed-icd10");
+  await seedIcd10Data();
+
   console.log("Seed complete!");
 }
 

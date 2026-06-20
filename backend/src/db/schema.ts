@@ -18,6 +18,84 @@ export const shiftEnum = pgEnum("shift", ["Day","Night","Rotating"]);
 export const billingStatusEnum = pgEnum("billing_status", ["Draft","Pending","Paid","Partial","Cancelled","Refunded"]);
 export const claimStatusEnum = pgEnum("claim_status", ["Submitted","Approved","Rejected","Pending Review","Settled"]);
 
+// ── ICD-10 Master Tables ─────────────────────────────────────────────────
+
+export const icd10Chapters = pgTable("icd10_chapters", {
+  id: text("id").primaryKey(),                    // e.g., "01", "02", ..., "22"
+  romanNumeral: text("roman_numeral").notNull(),  // e.g., "I", "II", ..., "XXII"
+  title: text("title").notNull(),                 // e.g., "Certain infectious and parasitic diseases"
+  codeRangeStart: text("code_range_start").notNull(), // e.g., "A00"
+  codeRangeEnd: text("code_range_end").notNull(),     // e.g., "B99"
+});
+
+export const icd10Categories = pgTable("icd10_categories", {
+  code: text("code").primaryKey(),                // e.g., "A00-A09", "I10-I16"
+  chapterId: text("chapter_id").notNull().references(() => icd10Chapters.id),
+  title: text("title").notNull(),
+  includes: text("includes"),                     // Inclusion notes
+  excludes1: text("excludes1"),                   // Excludes1 notes (conditions not coded here)
+  excludes2: text("excludes2"),                   // Excludes2 notes (conditions coded elsewhere)
+}, (t) => [index("idx_icd10_cat_chapter").on(t.chapterId)]);
+
+export const icd10Codes = pgTable("icd10_codes", {
+  code: text("code").primaryKey(),                // e.g., "A00.0", "I10", "J06.9"
+  shortDesc: text("short_desc").notNull(),        // Short description (<=60 chars)
+  longDesc: text("long_desc").notNull(),          // Full description
+  categoryCode: text("category_code"),            // Parent category reference
+  chapterId: text("chapter_id").notNull(),        // Chapter reference
+  isBillable: boolean("is_billable").notNull().default(true),
+  isChronic: boolean("is_chronic").notNull().default(false),
+  isComorbidity: boolean("is_comorbidity").notNull().default(false),
+  isPediatric: boolean("is_pediatric").notNull().default(false),
+  isMaternity: boolean("is_maternity").notNull().default(false),
+  isNewborn: boolean("is_newborn").notNull().default(false),
+  ageRange: text("age_range"),                    // e.g., "0-17", "18+", "adult", "pediatric"
+  sexSpecific: text("sex_specific"),              // "M", "F", or null for both
+  manifestationCode: boolean("manifestation_code").notNull().default(false),
+  poa: text("poa"),                               // Present on Admission indicator guidance
+  hccCategory: text("hcc_category"),              // Hierarchical Condition Category (risk adjustment)
+  commonSpecialties: text("common_specialties").array(), // e.g., ["Cardiology", "Internal Medicine"]
+  keywords: text("keywords").array(),             // Search keywords/synonyms
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_icd10_short_desc").on(t.shortDesc),
+  index("idx_icd10_chapter").on(t.chapterId),
+  index("idx_icd10_billable").on(t.isBillable),
+  index("idx_icd10_chronic").on(t.isChronic),
+]);
+
+// ICD-10-PCS (Procedure Coding System)
+export const icd10PcsCodes = pgTable("icd10_pcs_codes", {
+  code: text("code").primaryKey(),                // 7-character alphanumeric
+  section: text("section").notNull(),             // Section (0-9, B-H, X)
+  bodySystem: text("body_system").notNull(),      
+  rootOperation: text("root_operation").notNull(),
+  bodyPart: text("body_part").notNull(),
+  approach: text("approach").notNull(),
+  device: text("device"),
+  qualifier: text("qualifier"),
+  shortDesc: text("short_desc").notNull(),
+  longDesc: text("long_desc").notNull(),
+  commonSpecialties: text("common_specialties").array(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_icd10_pcs_section").on(t.section),
+  index("idx_icd10_pcs_root_op").on(t.rootOperation),
+]);
+
+// Frequently used codes per specialty (for quick-pick)
+export const icd10SpecialtyFavorites = pgTable("icd10_specialty_favorites", {
+  id: serial("id").primaryKey(),
+  specialty: text("specialty").notNull(),
+  icdCode: text("icd_code").notNull().references(() => icd10Codes.code),
+  displayOrder: integer("display_order").notNull().default(0),
+  usageCount: integer("usage_count").notNull().default(0),
+}, (t) => [
+  index("idx_icd10_fav_specialty").on(t.specialty),
+  uniqueIndex("idx_icd10_fav_unique").on(t.specialty, t.icdCode),
+]);
+
 // ── Core Tables ──────────────────────────────────────────────────────────
 
 export const patients = pgTable("patients", {
@@ -106,12 +184,13 @@ export const encounters = pgTable("encounters", {
 export const diagnoses = pgTable("diagnoses", {
   id: text("id").primaryKey(),
   encounterId: text("encounter_id").notNull().references(() => encounters.id),
-  icdCode: text("icd_code").notNull(),
+  icdCode: text("icd_code").notNull().references(() => icd10Codes.code),
   description: text("description").notNull(),
   type: text("type").notNull().default("Primary"), // Primary | Secondary | Complication
   certainty: text("certainty").notNull().default("Confirmed"), // Confirmed | Suspected | Rule Out
+  presentOnAdmission: boolean("present_on_admission"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (t) => [index("idx_diag_encounter").on(t.encounterId)]);
+}, (t) => [index("idx_diag_encounter").on(t.encounterId), index("idx_diag_icd").on(t.icdCode)]);
 
 // ── Vitals ───────────────────────────────────────────────────────────────
 
