@@ -1,16 +1,17 @@
 import { Hono } from "hono";
-import { eq, ilike, or, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { db, schema } from "../db";
+import { requirePermission } from "../middleware/rbac";
 
 const patients = new Hono();
 
 // List with search & pagination
 patients.get("/", async (c) => {
   const query = c.req.query("q") || "";
-  const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100);
-  const offset = parseInt(c.req.query("offset") || "0");
+  const limit = Math.min(Number.parseInt(c.req.query("limit") || "50"), 100);
+  const offset = Number.parseInt(c.req.query("offset") || "0");
 
   const result = query
     ? await db.select().from(schema.patients)
@@ -44,23 +45,44 @@ const createPatientSchema = z.object({
   email: z.string().email().optional(),
 });
 
-patients.post("/", zValidator("json", createPatientSchema), async (c) => {
+// HIPAA §164.312(a)(1): Write access requires elevated role
+patients.post("/", requirePermission("patients", "write"), zValidator("json", createPatientSchema), async (c) => {
   const data = c.req.valid("json");
   await db.insert(schema.patients).values({ ...data, registeredAt: new Date() });
   return c.json({ id: data.id }, 201);
 });
 
-patients.patch("/:id", async (c) => {
+// HIPAA §164.312(c)(1): Validated PATCH with allowlist — prevents mass-assignment
+const updatePatientSchema = z.object({
+  name: z.string().min(1).optional(),
+  age: z.number().int().positive().optional(),
+  phone: z.string().optional(),
+  altPhone: z.string().optional(),
+  address: z.string().optional(),
+  email: z.string().email().optional(),
+  occupation: z.string().optional(),
+  emergencyContactName: z.string().optional(),
+  emergencyContactPhone: z.string().optional(),
+  allergies: z.array(z.string()).optional(),
+  chronicConditions: z.array(z.string()).optional(),
+  insuranceProvider: z.string().optional(),
+  insurancePolicyNo: z.string().optional(),
+}).strict(); // .strict() rejects unknown keys
+
+patients.patch("/:id", requirePermission("patients", "write"), zValidator("json", updatePatientSchema), async (c) => {
   const id = c.req.param("id");
-  const body = await c.req.json();
-  await db.update(schema.patients).set({ ...body, updatedAt: new Date() }).where(eq(schema.patients.id, id));
+  const data = c.req.valid("json");
+  await db.update(schema.patients).set({ ...data, updatedAt: new Date() }).where(eq(schema.patients.id, id));
   return c.json({ success: true });
 });
 
-// Link ABHA ID
-patients.post("/:id/link-abha", async (c) => {
+// Link ABHA ID — write permission required
+patients.post("/:id/link-abha", requirePermission("patients", "write"), async (c) => {
   const id = c.req.param("id");
-  const { abhaId } = await c.req.json();
+  const { abhaId } = await c.req.json() as { abhaId: string };
+  if (!abhaId || typeof abhaId !== "string") {
+    return c.json({ error: "Invalid abhaId" }, 400);
+  }
   await db.update(schema.patients).set({ abhaId }).where(eq(schema.patients.id, id));
   return c.json({ success: true });
 });

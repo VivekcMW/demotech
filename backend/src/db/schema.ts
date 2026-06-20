@@ -18,6 +18,43 @@ export const shiftEnum = pgEnum("shift", ["Day","Night","Rotating"]);
 export const billingStatusEnum = pgEnum("billing_status", ["Draft","Pending","Paid","Partial","Cancelled","Refunded"]);
 export const claimStatusEnum = pgEnum("claim_status", ["Submitted","Approved","Rejected","Pending Review","Settled"]);
 
+// ── HIPAA Audit Log ──────────────────────────────────────────────────────
+// §164.312(b) — Audit Controls: Immutable record of all PHI access events.
+// This table is append-only; rows must never be updated or deleted.
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),               // Who accessed (JWT sub)
+  userRole: text("user_role").notNull(),           // Role at time of access
+  action: text("action").notNull(),                // READ | CREATE | UPDATE | DELETE | SEARCH | LOGIN | LOGIN_FAILED
+  resource: text("resource").notNull(),            // e.g., "patients", "encounters"
+  recordId: text("record_id"),                     // Specific record accessed (e.g., "PT-001")
+  outcome: text("outcome").notNull(),              // SUCCESS | FAILURE
+  requestId: text("request_id"),                   // Correlation ID
+  ipAddress: text("ip_address"),                   // Client IP
+  path: text("path"),                              // Sanitized request path (no query strings / PHI)
+  details: text("details"),                        // Additional context (no raw PHI)
+  durationMs: integer("duration_ms"),              // Response time
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_audit_user").on(t.userId),
+  index("idx_audit_resource").on(t.resource),
+  index("idx_audit_created").on(t.createdAt),
+  index("idx_audit_record").on(t.recordId),
+]);
+
+// ── Login Attempts (brute-force protection) ──────────────────────────────
+// §164.312(d) — Person Authentication: Track failed attempts for lockout
+export const loginAttempts = pgTable("login_attempts", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  ipAddress: text("ip_address").notNull(),
+  success: boolean("success").notNull().default(false),
+  attemptedAt: timestamp("attempted_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_login_email_time").on(t.email, t.attemptedAt),
+  index("idx_login_ip_time").on(t.ipAddress, t.attemptedAt),
+]);
+
 // ── ICD-10 Master Tables ─────────────────────────────────────────────────
 
 export const icd10Chapters = pgTable("icd10_chapters", {

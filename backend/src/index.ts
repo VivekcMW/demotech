@@ -5,6 +5,8 @@ import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { rateLimiter } from "hono-rate-limiter";
 import { authMiddleware } from "./middleware/auth";
+import { auditLog } from "./middleware/audit";
+import { requirePermission } from "./middleware/rbac";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { initSentry, Sentry } from "./monitoring/sentry";
@@ -67,18 +69,21 @@ if (!isTestMode) {
 // Request size limit (1MB)
 app.use("*", async (c, next) => {
   const contentLength = c.req.header("content-length");
-  if (contentLength && parseInt(contentLength) > 1024 * 1024) {
+  if (contentLength && Number.parseInt(contentLength) > 1024 * 1024) {
     return c.json({ error: "Request body too large" }, 413);
   }
   await next();
 });
 
-// Structured JSON logging
+// HIPAA §164.312(b): PHI-scrubbed structured logging
+// Logs method + sanitized path (no query strings) + status code only
 app.use("*", logger((str) => {
+  // Strip query strings from logged message to prevent PHI leakage via patient IDs / search terms
+  const sanitized = str.replace(/\?[^\s]*/g, "?[redacted]");
   const logEntry = {
     timestamp: new Date().toISOString(),
     level: "info",
-    message: str,
+    message: sanitized,
   };
   console.log(JSON.stringify(logEntry));
 }));
@@ -107,7 +112,13 @@ if (process.env.SENTRY_DSN) {
     try {
       await next();
     } catch (err) {
-      Sentry.captureException(err);
+      // HIPAA §164.312(b): Scrub PHI before sending to third-party Sentry
+      // Only capture the error class + sanitized message, not stack frames with patient data
+      if (err instanceof Error) {
+        Sentry.captureException(new Error(err.message), {
+          extra: { requestId: c.get("requestId") },
+        });
+      }
       throw err;
     }
   });
@@ -153,8 +164,28 @@ app.get("/ready", async (c) => {
 // Public routes
 app.route("/api/v1/auth", authRoutes);
 
-// Protected routes
+// ── Protected routes ─────────────────────────────────────────────────────
+// All routes below require: (1) valid JWT, (2) role-based permission, (3) audit log
 app.use("/api/v1/*", authMiddleware);
+
+// HIPAA §164.312(b): Global audit log for all PHI-bearing routes
+app.use("/api/v1/*", auditLog);
+
+// HIPAA §164.312(a)(1) + §164.502(b): Role-Based Access Control
+// Each resource enforces minimum-necessary access by role
+app.use("/api/v1/patients/*",     requirePermission("patients",     "read"));
+app.use("/api/v1/appointments/*", requirePermission("appointments", "read"));
+app.use("/api/v1/encounters/*",   requirePermission("encounters",   "read"));
+app.use("/api/v1/orders/*",       requirePermission("orders",       "read"));
+app.use("/api/v1/lab/*",          requirePermission("lab",          "read"));
+app.use("/api/v1/billing/*",      requirePermission("billing",      "read"));
+app.use("/api/v1/clinical/*",     requirePermission("clinical",     "read"));
+app.use("/api/v1/inventory/*",    requirePermission("inventory",    "read"));
+app.use("/api/v1/staff/*",        requirePermission("staff",        "read"));
+app.use("/api/v1/assets/*",       requirePermission("assets",       "read"));
+app.use("/api/v1/cme/*",          requirePermission("cme",          "read"));
+app.use("/api/v1/reports/*",      requirePermission("reports",      "read"));
+app.use("/api/v1/icd10/*",        requirePermission("icd10",        "read"));
 
 app.route("/api/v1/patients", patientsRoutes);
 app.route("/api/v1/appointments", appointmentsRoutes);
@@ -173,14 +204,13 @@ app.route("/api/v1/icd10", icd10Routes);
 // Global error handler
 app.onError((err, c) => {
   const requestId = c.get("requestId") || "unknown";
+  // HIPAA §164.312(b): Omit stack trace and request path from logs to prevent PHI exposure
   console.error(JSON.stringify({
     timestamp: new Date().toISOString(),
     level: "error",
     requestId,
     error: err.message,
-    stack: err.stack,
-    path: c.req.path,
-    method: c.req.method,
+    // NOTE: stack and path intentionally omitted — may contain PHI
   }));
   
   // Send to Sentry
