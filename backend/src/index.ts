@@ -27,6 +27,11 @@ import assetsRoutes from "./routes/assets";
 import cmeRoutes from "./routes/cme";
 import reportsRoutes from "./routes/reports";
 import icd10Routes from "./routes/icd10";
+import dicomRoutes from "./routes/dicom";
+import bulkExportRoutes from "./routes/bulkExport";
+import abdmRoutes from "./routes/abdm";
+import integrationRoutes from "./routes/integration";
+import fhirRoutes from "./routes/fhir";
 
 const app = new Hono();
 
@@ -164,6 +169,9 @@ app.get("/ready", async (c) => {
 // Public routes
 app.route("/api/v1/auth", authRoutes);
 
+// FHIR R4 API — public read, authenticated write
+app.route("/api/fhir/r4", fhirRoutes);
+
 // ── Protected routes ─────────────────────────────────────────────────────
 // All routes below require: (1) valid JWT, (2) role-based permission, (3) audit log
 app.use("/api/v1/*", authMiddleware);
@@ -186,6 +194,10 @@ app.use("/api/v1/assets/*",       requirePermission("assets",       "read"));
 app.use("/api/v1/cme/*",          requirePermission("cme",          "read"));
 app.use("/api/v1/reports/*",      requirePermission("reports",      "read"));
 app.use("/api/v1/icd10/*",        requirePermission("icd10",        "read"));
+app.use("/api/v1/dicom/*",       requirePermission("dicom",        "read"));
+app.use("/api/fhir/r4/*",        requirePermission("exports",      "read"));
+app.use("/api/v1/abdm/*",           requirePermission("abdm",           "read"));
+app.use("/api/v1/integration/*",   requirePermission("integration",   "read"));
 
 app.route("/api/v1/patients", patientsRoutes);
 app.route("/api/v1/appointments", appointmentsRoutes);
@@ -200,6 +212,10 @@ app.route("/api/v1/assets", assetsRoutes);
 app.route("/api/v1/cme", cmeRoutes);
 app.route("/api/v1/reports", reportsRoutes);
 app.route("/api/v1/icd10", icd10Routes);
+app.route("/api/v1/dicom", dicomRoutes);
+app.route("/api/fhir/r4", bulkExportRoutes);
+app.route("/api/v1/abdm", abdmRoutes);
+app.route("/api/v1/integration", integrationRoutes);
 
 // Global error handler
 app.onError((err, c) => {

@@ -39,6 +39,20 @@ meta_description: "Lab analysers, imaging modalities, WhatsApp Business, payment
 
 ---
 
+## Integration endpoints
+
+**HL7v2 MLLP server.** Dedicated MLLP listener on port 6165 for ADT (admission, discharge, transfer), ORM (orders), and ORU (results) messages. Supports ER7 (pipe-delimited) encoding. Connect lab analysers, legacy systems, and third-party middleware directly.
+
+**DICOMweb.** DICOMweb endpoints available at `/dicomweb/studies` for STOW-RS (store), WADO-RS (retrieve), and QIDO-RS (query). Supports CT, MRI, X-ray, ultrasound, and mammography modalities.
+
+**LIS connector.** Dedicated LIS Gateway service for bi-directional lab integration. ASTM E1381-02 and HL7 v2.5 message formats supported. Auto-orders and auto-results with configurable mapping rules.
+
+**Webhook subscriptions.** Subscribe to real-time events — admission, discharge, transfer, result released, bill finalised, appointment changes. Webhook payloads are delivered as JSON to your configured endpoint with retry and logging.
+
+**Admin configuration.** All integration endpoints are configurable from the admin dashboard — connection strings, ports, API keys, mapping tables, and webhook targets — without touching code or config files.
+
+---
+
 ## When something isn't on the list
 
 The honest answer most vendors avoid: integration feasibility depends on the other system having a door. If your device or software exposes a standard interface (HL7, FHIR, DICOM, ASTM, REST), we connect during implementation as scoped work, quoted before we start. If it has no interface at all, we say so upfront rather than after the contract.

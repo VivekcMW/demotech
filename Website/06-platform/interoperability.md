@@ -26,6 +26,20 @@ A hospital system that traps data is a future migration crisis. {Product} is bui
 
 ---
 
+## FHIR API — live and available
+
+The FHIR R4 API is now fully operational. All integration partners and in-house developers can access the following:
+
+- **Base endpoint:** `/api/fhir/r4/`
+- **Supported resources:** Patient, Observation, Encounter, Condition, MedicationRequest, DiagnosticReport, ImagingStudy
+- **Operations:** Full CRUD (create, read, update, delete), search, and batch/transaction bundles
+- **Authentication:** JWT Bearer token (same credentials as the EHR API)
+- **Documentation:** Full OpenAPI/Swagger specification available at [`/api/docs`](/resources/api-docs)
+
+These endpoints are live in production and sandbox environments. No additional licensing or approval is required to start integrating.
+
+---
+
 ## What connects in practice
 
 - Lab analysers (two-way) and imaging modalities (worklist + store)

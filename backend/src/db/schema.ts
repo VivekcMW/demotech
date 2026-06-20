@@ -482,3 +482,190 @@ export const teleconsultations = pgTable("teleconsultations", {
   prescriptions: jsonb("prescriptions").default([]),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => [index("idx_tel_patient").on(t.patientId), index("idx_tel_status").on(t.callStatus)]);
+
+// ── FHIR Resource Tables ─────────────────────────────────────────────────
+// These store FHIR R4 resources synced from EHR tables for API access.
+
+export const fhirPatients = pgTable("fhir_patients", {
+  id: text("id").primaryKey(),
+  ehrId: text("ehr_id").notNull().unique().references(() => patients.id),
+  resource: jsonb("resource").notNull(),
+  searchName: text("search_name"),
+  searchGiven: text("search_given"),
+  searchFamily: text("search_family"),
+  searchIdentifier: text("search_identifier"),
+  searchBirthDate: text("search_birth_date"),
+  searchGender: text("search_gender"),
+  searchPhone: text("search_phone"),
+  searchAbha: text("search_abha"),
+  versionId: integer("version_id").notNull().default(1),
+  lastSyncedAt: timestamp("last_synced_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_fhir_pat_search_name").on(t.searchName),
+  index("idx_fhir_pat_search_identifier").on(t.searchIdentifier),
+  index("idx_fhir_pat_search_abha").on(t.searchAbha),
+  index("idx_fhir_pat_search_birthdate").on(t.searchBirthDate),
+  index("idx_fhir_pat_ehr").on(t.ehrId),
+]);
+
+export const fhirObservations = pgTable("fhir_observations", {
+  id: text("id").primaryKey(),
+  ehrSource: text("ehr_source").notNull(),  // vitals | lab_orders
+  ehrId: text("ehr_id").notNull(),
+  patientId: text("patient_id").notNull().references(() => patients.id),
+  encounterId: text("encounter_id").references(() => encounters.id),
+  resource: jsonb("resource").notNull(),
+  searchCode: text("search_code"),
+  searchCategory: text("search_category"),
+  searchDate: text("search_date"),
+  searchStatus: text("search_status"),
+  versionId: integer("version_id").notNull().default(1),
+  lastSyncedAt: timestamp("last_synced_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_fhir_obs_patient").on(t.patientId),
+  index("idx_fhir_obs_code").on(t.searchCode),
+  index("idx_fhir_obs_date").on(t.searchDate),
+  index("idx_fhir_obs_ehr").on(t.ehrSource, t.ehrId),
+]);
+
+export const fhirEncounters = pgTable("fhir_encounters", {
+  id: text("id").primaryKey(),
+  ehrId: text("ehr_id").notNull().unique(),
+  patientId: text("patient_id").notNull().references(() => patients.id),
+  resource: jsonb("resource").notNull(),
+  searchDate: text("search_date"),
+  searchType: text("search_type"),
+  searchStatus: text("search_status"),
+  searchDepartment: text("search_department"),
+  versionId: integer("version_id").notNull().default(1),
+  lastSyncedAt: timestamp("last_synced_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_fhir_enc_patient").on(t.patientId),
+  index("idx_fhir_enc_date").on(t.searchDate),
+]);
+
+export const fhirConditions = pgTable("fhir_conditions", {
+  id: text("id").primaryKey(),
+  encounterId: text("encounter_id").notNull().references(() => encounters.id),
+  patientId: text("patient_id").notNull().references(() => patients.id),
+  resource: jsonb("resource").notNull(),
+  searchCode: text("search_code"),
+  searchClinicalStatus: text("search_clinical_status"),
+  searchVerificationStatus: text("search_verification_status"),
+  searchCategory: text("search_category"),
+  versionId: integer("version_id").notNull().default(1),
+  lastSyncedAt: timestamp("last_synced_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_fhir_cond_patient").on(t.patientId),
+  index("idx_fhir_cond_code").on(t.searchCode),
+]);
+
+export const fhirMedicationRequests = pgTable("fhir_medication_requests", {
+  id: text("id").primaryKey(),
+  ehrId: text("ehr_id").notNull().unique(),
+  patientId: text("patient_id").notNull().references(() => patients.id),
+  encounterId: text("encounter_id").references(() => encounters.id),
+  resource: jsonb("resource").notNull(),
+  searchStatus: text("search_status"),
+  searchMedication: text("search_medication"),
+  versionId: integer("version_id").notNull().default(1),
+  lastSyncedAt: timestamp("last_synced_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_fhir_med_patient").on(t.patientId),
+  index("idx_fhir_med_status").on(t.searchStatus),
+]);
+
+export const fhirDiagnosticReports = pgTable("fhir_diagnostic_reports", {
+  id: text("id").primaryKey(),
+  ehrId: text("ehr_id").notNull().unique(),
+  patientId: text("patient_id").notNull().references(() => patients.id),
+  encounterId: text("encounter_id").references(() => encounters.id),
+  resource: jsonb("resource").notNull(),
+  searchCode: text("search_code"),
+  searchCategory: text("search_category"),
+  searchDate: text("search_date"),
+  searchStatus: text("search_status"),
+  versionId: integer("version_id").notNull().default(1),
+  lastSyncedAt: timestamp("last_synced_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_fhir_dr_patient").on(t.patientId),
+  index("idx_fhir_dr_code").on(t.searchCode),
+  index("idx_fhir_dr_date").on(t.searchDate),
+]);
+
+export const fhirImagingStudies = pgTable("fhir_imaging_studies", {
+  id: text("id").primaryKey(),
+  ehrId: text("ehr_id").notNull().unique(),
+  patientId: text("patient_id").notNull().references(() => patients.id),
+  encounterId: text("encounter_id").references(() => encounters.id),
+  resource: jsonb("resource").notNull(),
+  searchModality: text("search_modality"),
+  searchDate: text("search_date"),
+  versionId: integer("version_id").notNull().default(1),
+  lastSyncedAt: timestamp("last_synced_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_fhir_img_patient").on(t.patientId),
+  index("idx_fhir_img_modality").on(t.searchModality),
+]);
+
+// ── FHIR Infrastructure Tables ───────────────────────────────────────────
+
+export const fhirSubscriptions = pgTable("fhir_subscriptions", {
+  id: text("id").primaryKey(),
+  status: text("status").notNull().default("active"),  // active | off | error
+  resourceType: text("resource_type").notNull(),
+  criteria: text("criteria"),
+  reason: text("reason"),
+  channelType: text("channel_type").notNull(),  // rest-hook | websocket | email
+  channelEndpoint: text("channel_endpoint").notNull(),
+  channelHeaders: jsonb("channel_headers").default({}),
+  error: text("error"),
+  lastDeliveredAt: timestamp("last_delivered_at"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const fhirIntegrationLog = pgTable("fhir_integration_log", {
+  id: text("id").primaryKey(),
+  source: text("source").notNull(),  // hl7 | fhir_api | abdm | dicom | webhook
+  direction: text("direction").notNull(),  // inbound | outbound
+  messageType: text("message_type"),
+  resourceType: text("resource_type"),
+  resourceId: text("resource_id"),
+  status: text("status").notNull(),  // success | error | pending
+  requestBody: text("request_body"),
+  responseBody: text("response_body"),
+  errorMessage: text("error_message"),
+  durationMs: integer("duration_ms"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_fhir_log_source").on(t.source),
+  index("idx_fhir_log_status").on(t.status),
+  index("idx_fhir_log_created").on(t.createdAt),
+]);
+
+export const fhirEndpoints = pgTable("fhir_endpoints", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  type: text("type").notNull(),  // lis | ris | pacs | hie | abdm | fhir | hl7
+  protocol: text("protocol").notNull(),  // mllp | dicomweb | fhir_rest | hl7_mllp
+  host: text("host").notNull(),
+  port: integer("port"),
+  path: text("path"),
+  username: text("username"),
+  encryptedPassword: text("encrypted_password"),
+  settings: jsonb("settings").default({}),
+  status: text("status").notNull().default("active"),  // active | inactive | error
+  lastTestedAt: timestamp("last_tested_at"),
+  lastConnectedAt: timestamp("last_connected_at"),
+  errorCount: integer("error_count").notNull().default(0),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});

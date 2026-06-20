@@ -67,6 +67,10 @@ const PERMISSIONS: Record<string, { read: UserRole[]; write: UserRole[] }> = {
     read: ["admin", "doctor", "nurse", "pharmacist", "lab_tech", "receptionist"],
     write: ["admin"],
   },
+  dicom: { read: ["admin", "doctor", "lab_tech"], write: ["admin", "doctor"] },
+  exports: { read: ["admin"], write: ["admin"] },
+  fhir: { read: ["admin", "doctor", "nurse", "lab_tech", "receptionist"], write: ["admin", "doctor"] },
+  subscriptions: { read: ["admin"], write: ["admin"] },
 };
 
 // ── RBAC middleware factory ────────────────────────────────────────────────────

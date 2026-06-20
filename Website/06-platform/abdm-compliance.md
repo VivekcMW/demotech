@@ -30,6 +30,19 @@ Every data exchange rides the ABDM consent artefact: purpose, date range, data t
 
 ---
 
+## HIE & PHR connectivity
+
+**Health Information Exchange (HIE).** Push and pull health records through ABDM gateway. {Product} supports:
+- **Push:** Upload clinical documents, diagnostic reports, and summaries to the patient's ABHA-linked record
+- **Pull:** Retrieve records from other ABDM-compliant facilities when the patient consents
+- **Event notifications:** Receive alerts when records are added to a patient's longitudinal health history
+
+**PHR sync.** Patients can sync their records with any ABDM-registered Personal Health App (PHR app). The sync includes consultation summaries, lab reports, prescriptions, and immunisation records — in the patient's preferred app.
+
+**Note:** ABDM gateway integration requires live gateway credentials issued by the National Health Authority. {Product} handles the technical onboarding and certification process during implementation, but the hospital must complete HPR/HFR registration and obtain gateway credentials before going live.
+
+---
+
 ## Beyond ABDM: the compliance stack
 
 - **NABH** — quality indicators, audit trails, committee reports, and entry-level to full-accreditation evidence generated from live operations ([details on the Analytics page](/product/analytics-mis-nabh))

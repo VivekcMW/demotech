@@ -21,6 +21,8 @@
     "bcryptjs": "^2.4.3",
     "crypto-js": "^4.2.0",
     "drizzle-orm": "^0.40.0",
+    "fhirpath": "^3.0.0",
+    "node-hl7": "^2.5.0",
     "hono": "^4.7.0",
     "hono-rate-limiter": "^0.5.3",
     "jsonwebtoken": "^9.0.0",
