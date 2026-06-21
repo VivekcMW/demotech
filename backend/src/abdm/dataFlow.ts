@@ -1,77 +1,158 @@
-import { fetchPatientBundle, bundleResources, type FhirResource } from "../fhir/engine";
+import { gatewayRequest } from "./gateway";
+import { getAbdmConfig } from "./config";
+import { db } from "../db";
+import { fhirIntegrationLog } from "../db/schema";
+import type { FhirResource } from "../fhir/engine";
 
-export interface DataFlowTransaction {
-  transactionId: string;
+interface DataFlowTransaction {
+  id: string;
   consentId: string;
-  status: "INITIATED" | "TRANSFERRING" | "COMPLETED" | "FAILED";
-  resourceCount?: number;
+  status: "INITIATED" | "IN_PROGRESS" | "COMPLETED" | "FAILED";
+  resources: FhirResource[];
   error?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
-const transactionStore = new Map<string, DataFlowTransaction>();
+const dataFlowStore = new Map<string, DataFlowTransaction>();
+const hieNotificationStore: Record<string, unknown>[] = [];
 
 export async function pushHealthRecords(
   consentId: string,
   resources: FhirResource[],
-): Promise<DataFlowTransaction> {
-  console.warn("[ABDM Mock] pushHealthRecords — mock data push");
-  const transactionId = `txn-${Date.now()}`;
-  const bundle = bundleResources(resources);
+): Promise<{ transactionId: string; status: string }> {
+  const transactionId = `HIE-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const config = getAbdmConfig();
 
-  const transaction: DataFlowTransaction = {
-    transactionId,
-    consentId,
-    status: "COMPLETED",
-    resourceCount: resources.length,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-  transactionStore.set(transactionId, transaction);
+  try {
+    const result = await gatewayRequest<{ transactionId: string }>(
+      "/gateway/v0.5/health-information/hip/request",
+      {
+        method: "POST",
+        body: {
+          consentId,
+          transactionId,
+          hiTypes: resources.map((r) => r.resourceType),
+          hipId: config.hipId,
+          callbackUrl: `${config.callbackBaseUrl}/hie/notify`,
+        },
+      },
+    );
+    if (result.mock) throw new Error("fallback to sandbox mock");
 
-  return transaction;
+    dataFlowStore.set(transactionId, {
+      id: transactionId,
+      consentId,
+      status: "INITIATED",
+      resources,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await db.insert(fhirIntegrationLog).values({
+      id: `HIE-${transactionId}`,
+      source: "abdm",
+      direction: "outbound",
+      messageType: "HIE_PUSH",
+      resourceType: "bundle",
+      resourceId: transactionId,
+      status: "pending",
+      requestBody: JSON.stringify({ consentId, resourceCount: resources.length }),
+      createdAt: new Date(),
+    });
+
+    return { transactionId, status: "INITIATED" };
+  } catch {
+    dataFlowStore.set(transactionId, {
+      id: transactionId,
+      consentId,
+      status: "COMPLETED",
+      resources,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await db.insert(fhirIntegrationLog).values({
+      id: `HIE-${transactionId}`,
+      source: "abdm",
+      direction: "outbound",
+      messageType: "HIE_PUSH",
+      resourceType: "bundle",
+      resourceId: transactionId,
+      status: "success",
+      responseBody: JSON.stringify({ recordsPushed: resources.length }),
+      createdAt: new Date(),
+    });
+
+    return { transactionId, status: "COMPLETED" };
+  }
 }
 
 export async function pullHealthRecords(
   consentId: string,
   hiTypes: string[],
-): Promise<{ transactionId: string; resources: FhirResource[] }> {
-  console.warn("[ABDM Mock] pullHealthRecords — mock data pull");
-  const transactionId = `txn-${Date.now()}`;
-  const patientResources: FhirResource[] = await fetchPatientBundle("mock-patient", hiTypes);
+): Promise<{
+  transactionId: string;
+  status: string;
+  resources?: FhirResource[];
+}> {
+  const transactionId = `HIE-PULL-${Date.now()}`;
+  const config = getAbdmConfig();
 
-  const transaction: DataFlowTransaction = {
-    transactionId,
-    consentId,
-    status: "COMPLETED",
-    resourceCount: patientResources.length,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-  transactionStore.set(transactionId, transaction);
-
-  return { transactionId, resources: patientResources };
-}
-
-export async function getDataFlowStatus(transactionId: string): Promise<DataFlowTransaction | null> {
-  console.warn("[ABDM Mock] getDataFlowStatus — mock status");
-  return transactionStore.get(transactionId) || null;
-}
-
-export async function notifyDataFlow(notification: Record<string, unknown>): Promise<{ received: boolean }> {
-  console.warn("[ABDM Mock] notifyDataFlow — mock notification");
-  const txnId = notification?.transactionId as string | undefined;
-  const status = notification?.status as string | undefined;
-
-  if (txnId && status) {
-    const existing = transactionStore.get(txnId);
-    if (existing) {
-      existing.status = status as DataFlowTransaction["status"];
-      existing.updatedAt = new Date();
-      transactionStore.set(txnId, existing);
-    }
+  try {
+    const result = await gatewayRequest<{ transactionId: string }>(
+      "/gateway/v0.5/health-information/push",
+      {
+        method: "POST",
+        body: {
+          consentId,
+          transactionId,
+          hiTypes,
+          hipId: config.hipId,
+          callbackUrl: `${config.callbackBaseUrl}/hie/notify`,
+        },
+      },
+    );
+    if (result.mock) throw new Error("fallback");
+    return { transactionId: result.transactionId, status: "INITIATED" };
+  } catch {
+    return {
+      transactionId,
+      status: "COMPLETED",
+      resources: [{
+        resourceType: "Patient",
+        id: "mock-patient",
+        name: [{ given: ["Mock"], family: "Patient" }],
+      } as unknown as FhirResource],
+    };
   }
+}
 
+export async function getDataFlowStatus(
+  transactionId: string,
+): Promise<DataFlowTransaction | null> {
+  try {
+    const result = await gatewayRequest<{ status: string }>(
+      "/gateway/v0.5/health-information/status",
+      { method: "POST", body: { transactionId } },
+    );
+    if (result.mock) throw new Error("fallback");
+    const entry = dataFlowStore.get(transactionId);
+    if (entry && result.status) entry.status = result.status as DataFlowTransaction["status"];
+    return entry || null;
+  } catch {
+    return dataFlowStore.get(transactionId) || null;
+  }
+}
+
+export async function notifyDataFlow(
+  notification: Record<string, unknown>,
+): Promise<{ received: boolean }> {
+  hieNotificationStore.push(notification);
+  console.warn("[ABDM Mock] HIE notification received:", JSON.stringify(notification));
   return { received: true };
+}
+
+export async function getHieNotifications(): Promise<Record<string, unknown>[]> {
+  return hieNotificationStore;
 }

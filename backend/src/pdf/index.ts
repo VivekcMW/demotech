@@ -1,0 +1,10 @@
+export { generatePrescription } from "./templates/prescription";
+export { generateLabReport } from "./templates/lab-report";
+export { generateOpdSlip } from "./templates/opd-slip";
+export { generateInvoice } from "./templates/invoice";
+export { generateDischargeSummary } from "./templates/discharge-summary";
+export { generateRadiologyReport } from "./templates/radiology-report";
+export { generateReferral } from "./templates/referral";
+export { generateCertificate } from "./templates/certificate";
+export { generateEvidencePackPdf } from "./templates/evidence-pack";
+export { downloadFonts } from "./download-fonts";

@@ -15,11 +15,40 @@ import {
   notifyConsentAction,
   revokeConsent,
 } from "../abdm/consent";
-import { pushHealthRecords, pullHealthRecords, getDataFlowStatus, notifyDataFlow } from "../abdm/dataFlow";
+import { pushHealthRecords, pullHealthRecords, getDataFlowStatus, notifyDataFlow, getHieNotifications } from "../abdm/dataFlow";
 import type { FhirResource } from "../fhir/engine";
-import { syncToPHR, syncFromPHR, getSyncStatus, scheduleSync } from "../abdm/phr";
+import { syncToPHR, syncFromPHR, getSyncStatus, scheduleSync, getSyncStats } from "../abdm/phr";
+import { getAllConsents, getConsentArtefact } from "../abdm/consent";
+import { checkGatewayHealth, resetSession } from "../abdm/gateway";
+import { getAbdmConfig } from "../abdm/config";
 
 const abdm = new Hono();
+
+// ── Gateway Management ──────────────────────────────────────────────────
+
+abdm.get("/gateway/health", async (c) => {
+  const health = await checkGatewayHealth();
+  return c.json(health);
+});
+
+abdm.get("/gateway/config", async (c) => {
+  const config = getAbdmConfig();
+  return c.json({
+    mode: config.mode,
+    clientId: config.clientId,
+    hipId: config.hipId,
+    hipName: config.hipName,
+    callbackBaseUrl: config.callbackBaseUrl,
+    gatewayUrl: config.mode === "sandbox"
+      ? "https://sandbox.abdm.gov.in"
+      : "https://abdm.gov.in",
+  });
+});
+
+abdm.post("/gateway/reset-session", async (c) => {
+  resetSession();
+  return c.json({ message: "Session reset" });
+});
 
 // ── Health ID ─────────────────────────────────────────────────────────────
 
@@ -82,6 +111,20 @@ abdm.post("/health-id/search", zValidator("json", searchAbhaSchema), async (c) =
 });
 
 // ── Consent ───────────────────────────────────────────────────────────────
+
+abdm.get("/consent", async (c) => {
+  const patientAbha = c.req.query("patientAbha");
+  const status = c.req.query("status");
+  const result = await getAllConsents({ patientAbha, status });
+  return c.json(result);
+});
+
+abdm.get("/consent/:id/artefact", async (c) => {
+  const id = c.req.param("id");
+  const result = await getConsentArtefact(id);
+  if (!result) return c.json({ error: "Consent not found" }, 404);
+  return c.json(result);
+});
 
 const requestConsentSchema = z.object({
   patientAbha: z.string().min(1),
@@ -194,6 +237,16 @@ abdm.get("/phr/status/:patientId", async (c) => {
   const patientId = c.req.param("patientId");
   const result = await getSyncStatus(patientId);
   return c.json(result);
+});
+
+abdm.get("/phr/stats", async (c) => {
+  const stats = await getSyncStats();
+  return c.json(stats);
+});
+
+abdm.get("/hie/notifications", async (c) => {
+  const notifications = await getHieNotifications();
+  return c.json(notifications);
 });
 
 export default abdm;

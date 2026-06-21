@@ -238,6 +238,10 @@ async function seed() {
   const { default: seedIcd10Data } = await import("./seed-icd10");
   await seedIcd10Data();
 
+  // ── LOINC Master Data ─────────────────────────────────────────────────
+  const { default: seedLoincData } = await import("./seed-loinc");
+  await seedLoincData();
+
   console.log("Seed complete!");
 }
 

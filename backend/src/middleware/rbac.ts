@@ -71,6 +71,12 @@ const PERMISSIONS: Record<string, { read: UserRole[]; write: UserRole[] }> = {
   exports: { read: ["admin"], write: ["admin"] },
   fhir: { read: ["admin", "doctor", "nurse", "lab_tech", "receptionist"], write: ["admin", "doctor"] },
   subscriptions: { read: ["admin"], write: ["admin"] },
+  abdm: { read: ["admin", "doctor"], write: ["admin"] },
+  integration: { read: ["admin"], write: ["admin"] },
+  nabh: { read: ["admin", "doctor"], write: ["admin", "doctor"] },
+  cds: { read: ["admin", "doctor", "nurse", "pharmacist"], write: ["admin", "doctor"] },
+  loinc: { read: ["admin", "doctor", "lab_tech"], write: ["admin"] },
+  alerting: { read: ["admin", "doctor", "nurse", "lab_tech"], write: ["admin", "doctor", "lab_tech"] },
 };
 
 // ── RBAC middleware factory ────────────────────────────────────────────────────

@@ -281,7 +281,9 @@ export const labTestCatalog = pgTable("lab_test_catalog", {
   category: text("category").notNull(),
   sampleType: text("sample_type"),
   container: text("container"),
+  loincCode: text("loinc_code"),
   parameters: jsonb("parameters").notNull().default([]),   // LabTestParam[]
+  criticalThresholds: jsonb("critical_thresholds").default({}),  // e.g., {"low": 3.5, "high": 5.5}
   price: integer("price"),
   turnaroundHours: integer("turnaround_hours"),
   instructions: text("instructions"),
@@ -650,6 +652,179 @@ export const fhirIntegrationLog = pgTable("fhir_integration_log", {
   index("idx_fhir_log_status").on(t.status),
   index("idx_fhir_log_created").on(t.createdAt),
 ]);
+
+// ── Clinical Decision Support Tables ─────────────────────────────────────
+
+export const drugInteractions = pgTable("drug_interactions", {
+  id: text("id").primaryKey(),
+  drugCode1: text("drug_code_1").notNull(),
+  drugName1: text("drug_name_1").notNull(),
+  drugCode2: text("drug_code_2").notNull(),
+  drugName2: text("drug_name_2").notNull(),
+  severity: text("severity").notNull(),  // contraindicated | major | moderate | minor
+  description: text("description").notNull(),
+  mechanism: text("mechanism"),
+  management: text("management"),
+  source: text("source").notNull().default("rxnav"),
+  lastVerified: timestamp("last_verified").notNull().defaultNow(),
+}, (t) => [
+  index("idx_ddi_pair").on(t.drugCode1, t.drugCode2),
+  index("idx_ddi_drug1").on(t.drugCode1),
+  index("idx_ddi_drug2").on(t.drugCode2),
+]);
+
+export const drugInteractionCache = pgTable("drug_interaction_cache", {
+  drugCode: text("drug_code").primaryKey(),
+  cacheData: jsonb("cache_data").notNull(),
+  cachedAt: timestamp("cached_at").notNull().defaultNow(),
+});
+
+export const cdsAlerts = pgTable("cds_alerts", {
+  id: text("id").primaryKey(),
+  patientId: text("patient_id").references(() => patients.id),
+  encounterId: text("encounter_id").references(() => encounters.id),
+  prescriptionId: text("prescription_id").references(() => prescriptions.id),
+  alertType: text("alert_type").notNull(),  // drug_interaction | duplicate_therapy | critical_result | allergy
+  severity: text("severity").notNull(),     // info | warning | critical
+  message: text("message").notNull(),
+  details: jsonb("details"),
+  acknowledgedBy: text("acknowledged_by"),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_cds_alert_patient").on(t.patientId),
+  index("idx_cds_alert_type").on(t.alertType),
+  index("idx_cds_alert_created").on(t.createdAt),
+]);
+
+// ── LOINC Codes ─────────────────────────────────────────────────────────
+
+export const loincCodes = pgTable("loinc_codes", {
+  loincNum: text("loinc_num").primaryKey(),  // LOINC numeric code
+  component: text("component").notNull(),
+  property: text("property").notNull(),
+  timeAspect: text("time_aspect"),
+  system: text("system"),
+  scaleType: text("scale_type"),
+  methodType: text("method_type"),
+  shortName: text("short_name"),
+  longCommonName: text("long_common_name"),
+  classType: text("class_type"),
+  status: text("status").notNull().default("ACTIVE"),
+}, (t) => [
+  index("idx_loinc_component").on(t.component),
+  index("idx_loinc_class").on(t.classType),
+]);
+
+// ── ALERTING: notification rules ────────────────────────────────────────
+
+export const alertNotificationRules = pgTable("alert_notification_rules", {
+  id: text("id").primaryKey(),
+  alertType: text("alert_type").notNull(),  // drug_interaction | duplicate_therapy | critical_result | allergy
+  channel: text("channel").notNull(),       // sms | email | in_app | webhook
+  recipient: text("recipient").notNull(),   // phone | email | url
+  enabled: boolean("enabled").notNull().default(true),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const alertNotifications = pgTable("alert_notifications", {
+  id: text("id").primaryKey(),
+  alertId: text("alert_id").notNull().references(() => cdsAlerts.id),
+  channel: text("channel").notNull(),
+  recipient: text("recipient").notNull(),
+  sentAt: timestamp("sent_at").notNull().defaultNow(),
+  status: text("status").notNull(),  // sent | failed | pending
+  error: text("error"),
+  deliveredAt: timestamp("delivered_at"),
+});
+
+// ── NABH Compliance Tables ───────────────────────────────────────────────
+
+export const nabhIndicatorDefinitions = pgTable("nabh_indicator_definitions", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),  // Clinical | Infection Control | Patient Safety | etc.
+  nabhStandard: text("nabh_standard").notNull(),  // e.g., "COP-1", "PCI-2"
+  description: text("description").notNull(),
+  numeratorDesc: text("numerator_desc").notNull(),
+  denominatorDesc: text("denominator_desc").notNull(),
+  targetRate: numeric("target_rate", { precision: 5, scale: 2 }),
+  computationType: text("computation_type").notNull(),  // auto | manual | semi
+  dataSource: text("data_source").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const nabhIndicatorValues = pgTable("nabh_indicator_values", {
+  id: text("id").primaryKey(),
+  indicatorId: text("indicator_id").notNull().references(() => nabhIndicatorDefinitions.id),
+  periodStart: date("period_start").notNull(),
+  periodEnd: date("period_end").notNull(),
+  periodType: text("period_type").notNull(),  // daily | weekly | monthly | quarterly
+  numerator: numeric("numerator", { precision: 10, scale: 2 }).notNull(),
+  denominator: numeric("denominator", { precision: 10, scale: 2 }).notNull(),
+  rate: numeric("rate", { precision: 8, scale: 2 }).notNull(),
+  department: text("department"),
+  computedAt: timestamp("computed_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_nabh_val_indicator").on(t.indicatorId),
+  index("idx_nabh_val_period").on(t.periodStart, t.periodEnd),
+  index("idx_nabh_val_dept").on(t.department),
+]);
+
+export const nabhRegisters = pgTable("nabh_registers", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),       // birth | death | notifiable_disease | pcpndt
+  patientId: text("patient_id").references(() => patients.id),
+  encounterId: text("encounter_id").references(() => encounters.id),
+  patientName: text("patient_name"),
+  recordedBy: text("recorded_by").notNull(),
+  recordedAt: timestamp("recorded_at").notNull().defaultNow(),
+  details: jsonb("details").notNull(),   // flexible per register type
+  registerNumber: text("register_number"),
+  notifiedTo: text("notified_to"),
+  notificationDate: date("notification_date"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_nabh_reg_type").on(t.type),
+  index("idx_nabh_reg_date").on(t.recordedAt),
+  index("idx_nabh_reg_patient").on(t.patientId),
+]);
+
+export const nabhCommitteeReports = pgTable("nabh_committee_reports", {
+  id: text("id").primaryKey(),
+  committee: text("committee").notNull(),   // Infection Control | Mortality Review | Safety | etc.
+  meetingDate: date("meeting_date").notNull(),
+  chairperson: text("chairperson"),
+  attendees: jsonb("attendees").default([]),
+  agenda: jsonb("agenda").default([]),
+  minutes: text("minutes"),
+  decisions: jsonb("decisions").default([]),
+  actionItems: jsonb("action_items").default([]),
+  associatedReportId: text("associated_report_id"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("idx_nabh_committee_date").on(t.meetingDate),
+  index("idx_nabh_committee_type").on(t.committee),
+]);
+
+export const nabhEvidencePacks = pgTable("nabh_evidence_packs", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  nabhStandard: text("nabh_standard"),
+  periodStart: date("period_start"),
+  periodEnd: date("period_end"),
+  status: text("status").notNull().default("draft"),   // draft | final | archived
+  package: jsonb("package").notNull(),
+  generatedBy: text("generated_by"),
+  generatedAt: timestamp("generated_at").notNull().defaultNow(),
+  exportedAt: timestamp("exported_at"),
+  format: text("format").default("json"),   // json | pdf | csv
+  fileUrl: text("file_url"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
 
 export const fhirEndpoints = pgTable("fhir_endpoints", {
   id: text("id").primaryKey(),

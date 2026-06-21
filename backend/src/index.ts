@@ -32,6 +32,12 @@ import bulkExportRoutes from "./routes/bulkExport";
 import abdmRoutes from "./routes/abdm";
 import integrationRoutes from "./routes/integration";
 import fhirRoutes from "./routes/fhir";
+import nabhRoutes from "./routes/nabh";
+import complianceRoutes from "./routes/compliance";
+import cdsRoutes from "./routes/cds";
+import loincRoutes from "./routes/loinc";
+import alertingRoutes from "./routes/alerting";
+import pdfRoutes from "./routes/pdf";
 
 const app = new Hono();
 
@@ -198,6 +204,12 @@ app.use("/api/v1/dicom/*",       requirePermission("dicom",        "read"));
 app.use("/api/fhir/r4/*",        requirePermission("exports",      "read"));
 app.use("/api/v1/abdm/*",           requirePermission("abdm",           "read"));
 app.use("/api/v1/integration/*",   requirePermission("integration",   "read"));
+app.use("/api/v1/nabh/*",          requirePermission("nabh",          "read"));
+app.use("/api/v1/compliance/*",    requirePermission("nabh",          "read"));
+app.use("/api/v1/cds/*",           requirePermission("cds",           "read"));
+app.use("/api/v1/loinc/*",         requirePermission("loinc",         "read"));
+app.use("/api/v1/alerting/*",      requirePermission("alerting",      "read"));
+app.use("/api/v1/pdf/*",           requirePermission("clinical",      "read"));
 
 app.route("/api/v1/patients", patientsRoutes);
 app.route("/api/v1/appointments", appointmentsRoutes);
@@ -216,6 +228,12 @@ app.route("/api/v1/dicom", dicomRoutes);
 app.route("/api/fhir/r4", bulkExportRoutes);
 app.route("/api/v1/abdm", abdmRoutes);
 app.route("/api/v1/integration", integrationRoutes);
+app.route("/api/v1/nabh", nabhRoutes);
+app.route("/api/v1/compliance", complianceRoutes);
+app.route("/api/v1/cds", cdsRoutes);
+app.route("/api/v1/loinc", loincRoutes);
+app.route("/api/v1/alerting", alertingRoutes);
+app.route("/api/v1/pdf", pdfRoutes);
 
 // Global error handler
 app.onError((err, c) => {
